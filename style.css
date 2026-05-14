@@ -1,0 +1,47 @@
+.wiki-box {
+width: 250px;
+border: 1px solid #a2a9b1;
+background: #f8f9fa;
+padding: 5px;
+display: grid;
+grid-template-columns: 1fr 1.5fr;
+align-items: baseline;
+gap: 4px;
+float: right;
+margin: 0 0 1em 1em;
+}
+
+.title, .section, img, .caption {
+grid-column: 1 / -1; 
+text-align: center;
+}
+
+.wiki-box img {
+max-width: 90%;
+height: auto;
+display: block;
+margin: 0 auto;
+clear: right;
+grid-column: 1 / -1;
+}
+
+.title { font-size: 1.2em; font-weight: bold; text-decoration: underline; }
+
+.section {
+background: #eaecef;
+font-weight: bold;
+padding: 2px;
+border: 1px solid #a2a9b1;
+margin-top: 5px;
+}
+
+.caption { font-size: 0.9em; margin-bottom: 5px; }
+
+.wiki-box > b {
+    background: #f2f2f2;
+    padding: 4px;
+}
+sub-1 {
+    font-size: 0.75em;
+    color: #333;
+}
