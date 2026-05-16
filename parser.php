@@ -76,6 +76,7 @@ function parseWiki($body)
 
     }, $htmlBody);
 
+    // return $htmlBody;
     /*
     |--------------------------------------------------------------------------
     | Code blocks ``` ... ```
@@ -258,7 +259,7 @@ function parseWiki($body)
 
     if ($refs) {
 
-        $htmlBody .= '<h2>References</h2><ol>';
+        $htmlBody .= '<br><br><br><h2>References</h2><hr><ol>';
 
         foreach ($refs as $i => $url) {
 

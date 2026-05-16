@@ -10,14 +10,13 @@ $output = $input ? parseWiki($input) : '';
 <head>
 <meta charset="UTF-8">
 <title>Korium Wiki markup tester</title>
-
+<link rel="stylesheet" href="style.css">
 <style>
 
 /* Layout */
 
 body {
     margin: 0;
-    font-family: sans-serif;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -162,46 +161,255 @@ document.addEventListener('mousemove', (e) => {
 
 /*
 |--------------------------------------------------------------------------
-| Live preview (debounced)
+| Live parser
 |--------------------------------------------------------------------------
 */
 
 const textarea = document.getElementById('markup');
 
-let timeout = null;
+textarea.addEventListener('input', updatePreview);
 
-textarea.addEventListener('input', () => {
+function escapeHtml(text) {
 
-    clearTimeout(timeout);
-
-    timeout = setTimeout(() => {
-        updatePreview();
-    }, 300);
-
-});
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
 
 function updatePreview() {
 
-    fetch('playground.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: 'markup=' + encodeURIComponent(textarea.value)
-    })
-    .then(res => res.text())
-    .then(html => {
+    let text = textarea.value;
 
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+    /*
+    |--------------------------------------------------------------------------
+    | Code blocks
+    |--------------------------------------------------------------------------
+    */
 
-        const newPreview = doc.getElementById('preview');
+    text = text.replace(/```([\s\S]*?)```/g, (m, code) => {
+        return `<pre><code>${escapeHtml(code.trim())}</code></pre>`;
+    });
 
-        if (newPreview) {
-            preview.innerHTML = newPreview.innerHTML;
+     /*
+    |--------------------------------------------------------------------------
+    | Infoboxes {{box ...}}
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/\{\{box\s*([\s\S]*?)\}\}/g, (m, raw) => {
+
+        const parts = raw.split(/\s*\|\s*/);
+
+        let fields = {};
+
+        parts.forEach(part => {
+
+            if (!part.includes('=')) return;
+
+            let pair = part.split('=');
+
+            let key = pair[0].trim().replace(/^["']|["']$/g, '');
+            let value = pair.slice(1).join('=').trim().replace(/^["']|["']$/g, '');
+
+            fields[key] = value;
+        });
+
+        let html = '<aside class="wiki-box">';
+
+        /*
+        |--------------------------------------------------------------------------
+        | Standard fields
+        |--------------------------------------------------------------------------
+        */
+
+        if (fields.title) {
+            html += `<div class="title">${fields.title}</div>`;
+            delete fields.title;
         }
 
+        if (fields.img) {
+            html += `<img src="${fields.img}" alt="">`;
+            delete fields.img;
+        }
+
+        if (fields.caption) {
+            html += `<div class="caption">${fields.caption}</div>`;
+            delete fields.caption;
+        }
+
+        if (fields.section) {
+            html += `<div class="section">${fields.section}</div>`;
+            delete fields.section;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Remaining fields
+        |--------------------------------------------------------------------------
+        */
+
+        Object.entries(fields).forEach(([key, value]) => {
+
+            html += `<b>${key}</b>`;
+            html += `<div>${value}</div>`;
+        });
+
+        html += '</aside>';
+
+        return html;
     });
+    /*
+    |--------------------------------------------------------------------------
+    | Inline code
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Internal links
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/\[\[(.*?)\]\]/g, (m, content) => {
+
+        const parts = content.split('|');
+
+        const page = parts[0].trim();
+        const label = parts[1] ? parts[1].trim() : page;
+
+        const slug = page.toLowerCase().replace(/\s+/g, '-');
+
+        return `<a href="page.php?slug=${slug}">${label}</a>`;
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Headers
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/^===\s*(.*?)\s*$/gm, '<h4>$1</h4>');
+    text = text.replace(/^==\s*(.*?)\s*$/gm, '<h3>$1</h3>');
+    text = text.replace(/^=\s*(.*?)\s*$/gm, '<h2>$1</h2>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Blockquotes
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/^>\s*(.*?)$/gm, '<blockquote>$1</blockquote>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Unordered lists
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/^- (.*?)$/gm, '<uli>$1</uli>');
+    text = text.replace(/(<uli>.*?<\/uli>\s*)+/gs, '<ul>$&</ul>');
+    text = text.replace(/<uli>/g, '<li>');
+    text = text.replace(/<\/uli>/g, '</li>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ordered lists
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/^# (.*?)$/gm, '<oli>$1</oli>');
+    text = text.replace(/(<oli>.*?<\/oli>\s*)+/gs, '<ol>$&</ol>');
+    text = text.replace(/<oli>/g, '<li>');
+    text = text.replace(/<\/oli>/g, '</li>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tables
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/\{\|([\s\S]*?)\|\}/g, (m, content) => {
+
+        let rows = content.trim().split('\n');
+
+        let html = '<table border="1">';
+
+        rows.forEach(row => {
+
+            row = row.trim();
+
+            if (!row) return;
+
+            let cells = row.replace(/^\|/, '').replace(/\|$/, '').split('|');
+
+            html += '<tr>';
+
+            cells.forEach(cell => {
+
+                cell = cell.trim();
+
+                if (/^''(.*?)''$/.test(cell)) {
+                    html += `<th>${cell.slice(2, -2)}</th>`;
+                } else {
+                    html += `<td>${cell}</td>`;
+                }
+
+            });
+
+            html += '</tr>';
+
+        });
+
+        html += '</table>';
+
+        return html;
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inline formatting
+    |--------------------------------------------------------------------------
+    */
+
+    text = text.replace(/\*\*\*(.*?)\*\*\*/gs, '<b><i>$1</i></b>');
+    text = text.replace(/\*\*(.*?)\*\*/gs, '<b>$1</b>');
+    text = text.replace(/\*(.*?)\*/gs, '<i>$1</i>');
+
+    text = text.replace(/__(.*?)__/gs, '<u>$1</u>');
+    text = text.replace(/--(.*?)--/gs, '<del>$1</del>');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Paragraphs
+    |--------------------------------------------------------------------------
+    */
+
+    let parts = text.split(/\n\s*\n/);
+
+    parts = parts.map(p => {
+
+        if (/^\s*<(h2|h3|h4|ul|ol|blockquote|table|pre)/.test(p)) {
+            return p;
+        }
+
+        return `<p>${p.trim()}</p>`;
+    });
+
+    text = parts.join('\n');
+
+    preview.innerHTML = text;
 }
+
+/*
+|--------------------------------------------------------------------------
+| Initial render
+|--------------------------------------------------------------------------
+*/
+
+updatePreview();
 
 /*
 |--------------------------------------------------------------------------
@@ -216,42 +424,32 @@ function clearText() {
 
 function loadExample() {
 
-    textarea.value = `= Example Page
+    textarea.value = `= Header 1
+== Header 2
+=== Header 3
+*Italic*, **Bold**, and ***Both***.
 
-This is *italic*, **bold**, and ***both***.
+\`inline code\`
 
 __Underline__ and --strikethrough--.
 
-[[Main Page|Home]]
+[[template|Internal Links]]
 
-== List
+- Unordered list
 
-- Item one
-- Item two
+# Ordered list
 
-# First
-# Second
-
-> This is a quote
-
-== Table
+> Blockquote
 
 {|
-| ''Name'' | ''Role'' |
-| Alice | Leader |
-| Bob | Minister |
+| ''Header 1'' | ''Header 2'' |
+| Data 1 | Data 2 |
 |}
 
-== Infobox
-
-{{box | title="Example" | section="Info" | "Founded"="2024" }}
-
-== Code
+{{box | title="Title" | img="https://upload.wikimedia.org/wikipedia/commons/0/0e/DefaultImage.png" | caption="Caption" | section="Section" | "Header"="Value" }}
 
 \`\`\`
-function test() {
-    return true;
-}
+code block
 \`\`\`
 
 == Reference

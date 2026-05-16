@@ -83,8 +83,9 @@ $htmlBody = parseWiki($body);
 <footer>
 
 <?php if ($categories): ?>
+<br>
 <p>
-<i>Categories:</i>
+<b>Categories:</b>
 
 <?php foreach ($categories as $cat): ?>
 <a href="category.php?name=<?= urlencode($cat) ?>">
